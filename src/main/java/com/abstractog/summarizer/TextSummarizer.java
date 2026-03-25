@@ -121,7 +121,101 @@ public class TextSummarizer {
                 sentences.add(sentence);
             }
         }
+
+        if (sentences.size() <= 1 && tokenize(normalized).size() > 40) {
+            List<String> fallback = splitByClause(normalized);
+            if (fallback.size() > 1) {
+                return fallback;
+            }
+
+            fallback = splitLongText(normalized, 22);
+            if (!fallback.isEmpty()) {
+                return fallback;
+            }
+        }
+
         return sentences;
+    }
+
+    private List<String> splitLongText(String text, int chunkSizeWords) {
+        List<String> words = tokenizePreserveCase(text);
+        List<String> chunks = new ArrayList<>();
+        if (words.isEmpty()) {
+            return chunks;
+        }
+
+        StringBuilder current = new StringBuilder();
+        int currentCount = 0;
+        for (String word : words) {
+            if (current.length() > 0) {
+                current.append(' ');
+            }
+            current.append(word);
+            currentCount++;
+
+            if (currentCount >= chunkSizeWords) {
+                chunks.add(current.toString());
+                current.setLength(0);
+                currentCount = 0;
+            }
+        }
+
+        if (current.length() > 0) {
+            chunks.add(current.toString());
+        }
+
+        return chunks;
+    }
+
+    private List<String> splitByClause(String text) {
+        String[] parts = text.split("(?<=[,;:])\\s+");
+        List<String> merged = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (String part : parts) {
+            String cleaned = part.trim();
+            if (cleaned.isEmpty()) {
+                continue;
+            }
+
+            if (current.length() > 0) {
+                current.append(' ');
+            }
+            current.append(cleaned);
+
+            if (tokenize(current.toString()).size() >= 10) {
+                merged.add(ensureSentenceEnd(current.toString()));
+                current.setLength(0);
+            }
+        }
+
+        if (current.length() > 0) {
+            merged.add(ensureSentenceEnd(current.toString()));
+        }
+
+        return merged;
+    }
+
+    private String ensureSentenceEnd(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String trimmed = text.trim();
+        char last = trimmed.charAt(trimmed.length() - 1);
+        if (last == '.' || last == '!' || last == '?') {
+            return capitalizeFirst(trimmed);
+        }
+        return capitalizeFirst(trimmed) + ".";
+    }
+
+    private String capitalizeFirst(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        if (value.length() == 1) {
+            return value.toUpperCase(Locale.ROOT);
+        }
+        return value.substring(0, 1).toUpperCase(Locale.ROOT) + value.substring(1);
     }
 
     private List<String> tokenize(String text) {
@@ -131,6 +225,19 @@ public class TextSummarizer {
         }
 
         Matcher matcher = TOKEN_PATTERN.matcher(text.toLowerCase(Locale.ROOT));
+        while (matcher.find()) {
+            tokens.add(matcher.group());
+        }
+        return tokens;
+    }
+
+    private List<String> tokenizePreserveCase(String text) {
+        List<String> tokens = new ArrayList<>();
+        if (text == null || text.isEmpty()) {
+            return tokens;
+        }
+
+        Matcher matcher = TOKEN_PATTERN.matcher(text);
         while (matcher.find()) {
             tokens.add(matcher.group());
         }
